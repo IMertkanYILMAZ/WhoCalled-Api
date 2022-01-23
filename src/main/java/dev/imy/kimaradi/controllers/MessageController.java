@@ -1,39 +1,46 @@
 package dev.imy.kimaradi.controllers;
 
-import dev.imy.kimaradi.models.MessageModel;
-import dev.imy.kimaradi.models.UserStorage;
-import dev.imy.kimaradi.services.UserService;
-import lombok.RequiredArgsConstructor;
+import dev.imy.kimaradi.models.Message;
+import dev.imy.kimaradi.services.Call;
+import dev.imy.kimaradi.services.CallService;
+import dev.imy.kimaradi.services.NotificationService;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.messaging.handler.annotation.DestinationVariable;
 import org.springframework.messaging.handler.annotation.MessageMapping;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
+import org.springframework.messaging.simp.annotation.SendToUser;
+import org.springframework.stereotype.Controller;
+
+import java.security.Principal;
+import java.time.LocalDateTime;
 
 
-@RestController
-@RequiredArgsConstructor
+@Controller
 public class MessageController {
 
+    private NotificationService notificationService;
+
+    private CallService callService;
+
 
     @Autowired
-    private SimpMessagingTemplate simpMessagingTemplate;
-
-    @Autowired
-    private UserService userService;
-
-    @MessageMapping("/chat/{to}")
-    public void sendMessage(@DestinationVariable String to, MessageModel message) {
-        System.out.println("handling send message: " + message + " to: " + to);
-        boolean isExists = UserStorage.getInstance().getUsers().contains(to);
-        boolean isUserRegistered = userService.existsUsersByPhoneNumber(to);
-
-        if (isExists) {
-            simpMessagingTemplate.convertAndSend("/topic/messages/" + to, message);
-        }
-        else if ((!isExists) && isUserRegistered){
-            System.out.println("User is Off-line...");
-        }
+    public MessageController(NotificationService notificationService, CallService callService) {
+        this.notificationService = notificationService;
+        this.callService = callService;
     }
+
+
+    @MessageMapping("/message")
+    @SendToUser("/topic/messages")
+    public void sendMessage(SimpMessageHeaderAccessor sha , Message message, Principal principal) throws Exception {
+       String callerNumber = sha.getUser().getName();
+
+       notificationService.sendNotification(principal.getName());
+
+        Call missedCall = new Call(callerNumber, message.getContent(), LocalDateTime.now());
+        callService.save(missedCall);
+
+    }
+
+
 
 }
